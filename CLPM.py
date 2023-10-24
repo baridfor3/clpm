@@ -83,14 +83,14 @@ class CLPM_EmbeddingSharedWeights(embedding_layer.EmbeddingSharedWeights):
         if len(self.domain_index) > 0:
             self.set_domain_bias(self.domain_index)
             self.rebuild_domain_index(self.domain_index)
+
+        # used to test languages prototype belong
         self.discriminator_LN = layerNormalization_layer.LayerNorm()
         self.discriminator_1 = tf.keras.layers.Dense(256, activation=tf.nn.leaky_relu)
         self.discriminator_2 = tf.keras.layers.Dense(256, activation=tf.nn.leaky_relu)
         self.discriminator_3 = tf.keras.layers.Dense(1)
         self.en_proto = mean_metric.Mean_MetricLayer("En_prototype")
         self.de_proto = mean_metric.Mean_MetricLayer("De_prototype")
-        # self.de_analogy = tf.keras.metrics.Mean("De_analogy")
-        # self.en_analogy = tf.keras.metrics.Mean("En_analogy")
         self.de_domain = mean_metric.Mean_MetricLayer("De")
         self.en_domain = mean_metric.Mean_MetricLayer("En")
 
@@ -126,7 +126,6 @@ class CLPM_EmbeddingSharedWeights(embedding_layer.EmbeddingSharedWeights):
     def _CLPM(
         self,
         clpm_position,
-        label_x,
         src,
         cross_lingual_id,
         K=3,
@@ -141,7 +140,7 @@ class CLPM_EmbeddingSharedWeights(embedding_layer.EmbeddingSharedWeights):
         we compute every CLPM in paralell.
         """
 
-        def _cos(Q, k=3, self_bias=0):
+        def _cos(Q, k=K, self_bias=0):
             domain_bias = tf.gather(self.domain_bias_matrix, cross_lingual_id)
             # domain bias blocks out "not in the language domain" token by setting. Just like we use the masking in transformer.
             w, p = tf.nn.top_k(Q + domain_bias + self_bias, k=k)
@@ -171,22 +170,22 @@ class CLPM_EmbeddingSharedWeights(embedding_layer.EmbeddingSharedWeights):
         clpm_plus = tf.squeeze(clpm, -2) * tf.cast(tf.expand_dims(clpm_position, -1), tf.float32)
         return clpm_plus, 0
 
-    def recognizer(self, x, shift, mask, cross_lingual_id):
-        # 1 de, 2 en
-        en_marker = tf.cast(tf.equal(cross_lingual_id, 2), tf.float32)
-        de_marker = tf.cast(tf.equal(cross_lingual_id, 1), tf.float32)
-        mask = tf.cast(mask, tf.float32)
-        metric = tf.squeeze(self.discriminator(x, training=False), -1) * mask
-        self.en_proto(
-            tf.math.divide_no_nan(
-                tf.reduce_sum(metric * en_marker), tf.reduce_sum(mask * en_marker)
-            )
-        )
-        self.de_proto(
-            tf.math.divide_no_nan(
-                tf.reduce_sum(metric * de_marker), tf.reduce_sum(mask * de_marker)
-            )
-        )
+    # def recognizer(self, x, shift, mask, cross_lingual_id):
+    #     # 1 de, 2 en
+    #     en_marker = tf.cast(tf.equal(cross_lingual_id, 2), tf.float32)
+    #     de_marker = tf.cast(tf.equal(cross_lingual_id, 1), tf.float32)
+    #     mask = tf.cast(mask, tf.float32)
+    #     metric = tf.squeeze(self.discriminator(x, training=False), -1) * mask
+    #     self.en_proto(
+    #         tf.math.divide_no_nan(
+    #             tf.reduce_sum(metric * en_marker), tf.reduce_sum(mask * en_marker)
+    #         )
+    #     )
+    #     self.de_proto(
+    #         tf.math.divide_no_nan(
+    #             tf.reduce_sum(metric * de_marker), tf.reduce_sum(mask * de_marker)
+    #         )
+    #     )
 
     def domain_filter(src, vocabulary, domain_index):
         """
@@ -208,16 +207,16 @@ class CLPM_EmbeddingSharedWeights(embedding_layer.EmbeddingSharedWeights):
         # config.update(c)
         return c
 
-    def vis_domain(self, src, n):
-        domain_index = self.r_domain_index[2].numpy()
-        non_zero = tf.reduce_sum(
-            tf.cast(tf.not_equal(tf.reduce_sum(src, -1, keepdims=True), 0.0), tf.float32)
-        )
-        src = self._linear(src)
-        src = tf.squeeze(tf.reduce_sum(src, -2) / non_zero, 0)
-        src = src.numpy()
-        domain_index = domain_index
-        with open("./" + n, "w") as f:
-            for i in range(len(src)):
-                f.write(str(src[i]) + "@@" + str(domain_index[i]))
-                f.write("\n")
+    # def vis_domain(self, src, n):
+    #     domain_index = self.r_domain_index[2].numpy()
+    #     non_zero = tf.reduce_sum(
+    #         tf.cast(tf.not_equal(tf.reduce_sum(src, -1, keepdims=True), 0.0), tf.float32)
+    #     )
+    #     src = self._linear(src)
+    #     src = tf.squeeze(tf.reduce_sum(src, -2) / non_zero, 0)
+    #     src = src.numpy()
+    #     domain_index = domain_index
+    #     with open("./" + n, "w") as f:
+    #         for i in range(len(src)):
+    #             f.write(str(src[i]) + "@@" + str(domain_index[i]))
+    #             f.write("\n")
